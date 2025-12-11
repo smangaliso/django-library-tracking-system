@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .models import Author, Book, Member, Loan
@@ -52,3 +54,25 @@ class MemberViewSet(viewsets.ModelViewSet):
 class LoanViewSet(viewsets.ModelViewSet):
     queryset = Loan.objects.all()
     serializer_class = LoanSerializer
+
+    @action(detail=True, methods=['post'])
+    def extend_due_date(self, request, pk:None):
+        loan = self.get_object()
+        today = timezone.now().date()
+        member_id = request.data.get('member_id')
+        try:
+            loan = Loan.objects.get(loan=loan, member__id=member_id, is_returned=False)
+            if loan.due_date < today:
+                return Response({'error': 'The book is due please return it.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Loan.DoesNotExist:
+            return Response({'error': 'Active loan does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if loan.additional_days and loan.additional_days > 1:
+            loan.return_date = timezone.now().date() + timedelta(days=loan.additional_days)
+            loan.save()
+        else:
+            return Response({'status': 'Could not extend loan.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        return Response({'status': 'Loan Extended successfully.'}, status=status.HTTP_200_OK)
